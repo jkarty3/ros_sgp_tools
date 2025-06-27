@@ -90,11 +90,11 @@ class OnlineIPP(Node):
         self.data_file = h5py.File(data_fname, "a")
         self.dset_X = self.data_file.create_dataset("X", (0, 2), 
                                                     maxshape=(None, 2), 
-                                                    dtype=np.float32,
+                                                    dtype=np.float64,
                                                     chunks=True)
         self.dset_y = self.data_file.create_dataset("y", (0, 1), 
                                                     maxshape=(None, 1), 
-                                                    dtype=np.float32,
+                                                    dtype=np.float64,
                                                     chunks=True)
 
         # setup variables
@@ -358,6 +358,13 @@ class OnlineIPP(Node):
                 # Rerun method to get last batch of data
                 if not force_update:
                     self.update_with_data(force_update=True)
+                # Plot final path with all data
+                all_X = self.dset_X[()]
+                fname = f"final_waypoints-{strftime('%H-%M-%S', gmtime())}"
+                self.plot_paths(fname,
+                                self.waypoints,
+                                self.X_scaler.transform(all_X),
+                                update_waypoint=self.num_waypoints - 1)
                 self.get_logger().info('Finished mission, shutting down online planner')
                 rclpy.shutdown()
 
