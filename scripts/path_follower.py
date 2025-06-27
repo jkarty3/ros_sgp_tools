@@ -5,6 +5,10 @@ from ros_sgp_tools.srv import Waypoints
 from ros_sgp_tools.msg import ETA
 import numpy as np
 import rclpy
+import os
+from ament_index_python.packages import get_package_share_directory
+from utils import get_mission_plan, calculate_bounded_path
+from shapely.geometry import Polygon, LineString, Point
 
 
 class IPPPathFollower(Controller):
@@ -20,7 +24,18 @@ class IPPPathFollower(Controller):
         self.waypoint_service = self.create_service(Waypoints, 
                                                     'waypoints',
                                                     self.waypoint_service_callback)
-      
+        
+        # Get the mission boundary
+        plan_fname = os.path.join(get_package_share_directory('ros_sgp_tools'), 
+                                                        'launch', 
+                                                        'sample.plan')
+        self.declare_parameter('geofence_plan', plan_fname)
+        plan_fname = self.get_parameter('geofence_plan').get_parameter_value().string_value
+        self.get_logger().info(f'New file test Plan File: {plan_fname}')
+        self.fence_vertices, *_ = get_mission_plan(plan_fname,
+                                                                  get_waypoints=False)
+        self.fence_polygon = Polygon(self.fence_vertices)
+
         # Initialize variables
         self.waypoints = None
         self.eta_msg = ETA()
@@ -100,10 +115,29 @@ class IPPPathFollower(Controller):
         for i in range(len(self.waypoints)):
             self.eta_msg.current_waypoint = i
             self.get_logger().info(f'Visiting waypoint {i}: {self.waypoints[i]}')
-            if self.go2waypoint([self.waypoints[i][0],
-                                 self.waypoints[i][1],
-                                 self.waypoints[i][2]+mission_altitude,]):
-                self.get_logger().info(f'Reached waypoint {i}')
+
+            # Check if the line from previous waypoint to current waypoint is within the boundary
+            if i > 0:
+                point_a = (self.waypoints[i-1][0], self.waypoints[i-1][1])
+                point_b = (self.waypoints[i][0], self.waypoints[i][1])
+                line = LineString([point_a, point_b])
+            if i==0 or self.fence_polygon.contains(line):
+                if self.go2waypoint([self.waypoints[i][0],
+                                self.waypoints[i][1],
+                                self.waypoints[i][2]+mission_altitude]):
+                    self.get_logger().info(f'Reached waypoint {i}')
+            else:
+                self.get_logger().info(f'Planned path to waypoint {i} leaves the boundary. Replanning.')
+                bounded_path = calculate_bounded_path(point_a, point_b,self.fence_polygon, 0.0001)
+                for j, point in enumerate(bounded_path[1:]):
+                    self.get_logger().info(f'Visiting waypoint {i-1}.{j+1}: {point}')
+                    if self.go2waypoint([point[0],
+                                point[1],
+                                self.waypoints[i][2]+mission_altitude]):
+                        if j==len(bounded_path)-1:
+                            self.get_logger().info(f'Reached waypoint {i}')
+                        else:
+                            self.get_logger().info(f'Reached waypoint {i-1}.{j+1}')
 
         if self.use_altitude:
             if self.tol_command(mission_altitude):
