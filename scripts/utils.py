@@ -137,7 +137,8 @@ def find_insertion_index(exterior_coords, intersection_point):
 # Get 2 points inside the polygon that are near where the line (point a -> point b) intersects the polygon
 def get_padded_intersects(point_a, point_b, fence_polygon, padding_length=0.0001):
     line = LineString([point_a, point_b])
-    intersection_coords = ordered_intersections_by_distance(point_a, point_b, fence_polygon)[1:-1]
+    intersection_coords = ordered_intersections_by_distance(point_a, point_b, fence_polygon)
+    intersection_coords = [intersection_coords[1], intersection_coords[-2]]
 
     padded_points = []
     for i in range(len(intersection_coords)):
@@ -162,9 +163,8 @@ def get_moved_point(point_a, point_b, fence_polygon, padding_length=0.0001):
     exterior_coords = list(fence_polygon.exterior.coords)
     insertion_index_1 = find_insertion_index(exterior_coords, intersection_coords[0])
     insertion_index_2 = find_insertion_index(exterior_coords, intersection_coords[1])
-    polygon_1 = Polygon(exterior_coords[:insertion_index_1+1] + intersection_coords + exterior_coords[insertion_index_2:])
-    polygon_2 = Polygon(exterior_coords[insertion_index_2:insertion_index_1:-1] + intersection_coords + [exterior_coords[insertion_index_2]])
-    smaller_polygon = polygon_1 if polygon_1.area < polygon_2.area else polygon_2
+    polygon_1 = Polygon(exterior_coords[:insertion_index_1+1] + intersection_coords[:2] + exterior_coords[insertion_index_2:])
+    polygon_2 = Polygon(exterior_coords[insertion_index_2:insertion_index_1:-1] + intersection_coords[:2] + [exterior_coords[insertion_index_2]])
     larger_polygon = polygon_1 if polygon_1.area > polygon_2.area else polygon_2
 
     # Find the correct direction to move the midpoint (towards the larger polygon)
@@ -177,11 +177,17 @@ def get_moved_point(point_a, point_b, fence_polygon, padding_length=0.0001):
 
     # Then move it to the intersect of the smaller polygon and add padding
     far_point = Point(midpoint.x + normal_vector[0], midpoint.y + normal_vector[1])
-    intersections = ordered_intersections_by_distance(midpoint, far_point, smaller_polygon)
-    return (intersections[1][0] + normal_vector[0] * padding_length, intersections[1][1] + normal_vector[1] * padding_length)
+    intersections = ordered_intersections_by_distance(Point(midpoint), far_point, fence_polygon)
+    intersect = Point(intersections[0][0], intersections[0][1])
+    padded = Point(intersect.x + normal_vector[0] * padding_length, intersect.y + normal_vector[1] * padding_length)
+    while not (fence_polygon.contains(padded)) and len(ordered_intersections_by_distance(intersect, padded, fence_polygon))<4:
+
+        padding_length /= 2
+        padded = Point(intersect.x + normal_vector[0] * padding_length, intersect.y + normal_vector[1] * padding_length)
+    return (padded.x, padded.y)
 
 # Calculate a list of points to travel from point a to point b while staying inside the polygon
-def calculate_bounded_path(point_a, point_b, fence_polygon, padding_length=0.0001):
+def calculate_bounded_path(point_a, point_b, fence_polygon, padding_length=0.0009):
     path = [point_a, point_b]
 
     if not fence_polygon.contains(LineString([path[0], path[1]])):

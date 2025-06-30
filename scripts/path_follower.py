@@ -128,7 +128,7 @@ class IPPPathFollower(Controller):
                     self.get_logger().info(f'Reached waypoint {i}')
             else:
                 self.get_logger().info(f'Planned path to waypoint {i} leaves the boundary. Replanning.')
-                bounded_path = calculate_bounded_path(point_a, point_b,self.fence_polygon, 0.0001)
+                bounded_path = calculate_bounded_path(point_a, point_b,self.fence_polygon, 0.00004)
                 for j, point in enumerate(bounded_path[1:]):
                     self.get_logger().info(f'Visiting waypoint {i-1}.{j+1}: {point}')
                     if self.go2waypoint([point[0],
