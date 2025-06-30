@@ -1,6 +1,8 @@
 import os
+import yaml
 import sys
 import psutil
+from time import gmtime, strftime
 
 from launch_ros.actions import Node
 from launch import LaunchDescription
@@ -55,6 +57,37 @@ def generate_launch_description():
     print(f"FCU_URL: {fcu_url}")
     if data_type=='Ping1D':
         print(f"PING1D_PORT: {ping1d_port}")
+
+    # Create data folder
+    time_stamp = strftime("%Y-%m-%d-%H-%M-%S", gmtime())
+    data_folder = os.path.join(data_folder, f'IPP-mission-{time_stamp}')
+    if not os.path.exists(data_folder):
+        os.makedirs(data_folder)
+    
+    # Dump parameters to YAML file
+    params_dict = {
+	    'namespace': namespace,
+	    'data_type': data_type,
+	    'num_waypoints': num_waypoints,
+	    'sampling_rate': sampling_rate,
+	    'data_buffer_size': data_buffer_size,
+	    'train_param_inducing': train_param_inducing,
+	    'num_param_inducing': num_param_inducing,
+	    'adaptive_ipp': adaptive_ipp,
+	    'data_folder': data_folder,
+	    'fcu_url': fcu_url,
+	    'ping1d_port': ping1d_port,
+	    'kernel': kernel,
+	}
+    ros_param_yaml = {
+        namespace + '/IPP_params': {
+            'ros__parameters': params_dict
+        }
+    }
+    yaml_output_path = os.path.join(data_folder, f'launch_params.yaml')
+    with open(yaml_output_path, 'w') as f:
+        yaml.dump(ros_param_yaml, f)
+    print(f"Parameters saved to {yaml_output_path}")
     print('')
 
     nodes = []

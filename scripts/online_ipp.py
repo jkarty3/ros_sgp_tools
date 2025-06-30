@@ -82,10 +82,6 @@ class OnlineIPP(Node):
         self.kernel = None if not self.adaptive_ipp else self.kernel
 
         # Create sensor data h5py file
-        time_stamp = strftime("%Y-%m-%d-%H-%M-%S", gmtime())
-        self.data_folder = os.path.join(self.data_folder, f'IPP-mission-{time_stamp}')
-        if not os.path.exists(self.data_folder):
-            os.makedirs(self.data_folder)
         data_fname = os.path.join(self.data_folder, f'mission-log.hdf5')
         self.data_file = h5py.File(data_fname, "a")
         self.dset_X = self.data_file.create_dataset("X", (0, 2), 
