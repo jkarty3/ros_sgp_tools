@@ -38,6 +38,10 @@ class IPPPathFollower(Controller):
             fence_vertices = np.vstack([self.fence_vertices, self.fence_vertices[0]])
         self.fence_polygon = Polygon(fence_vertices)
 
+        self.declare_parameter('sampling_rate', 2)
+        self.sampling_rate = self.get_parameter('sampling_rate').get_parameter_value().integer_value
+        self.get_logger().info(f'Sampling Rate: {self.sampling_rate}')
+
         # Initialize variables
         self.waypoints = None
         self.eta_msg = ETA()
@@ -122,10 +126,12 @@ class IPPPathFollower(Controller):
                 point_a = (self.waypoints[i-1][0], self.waypoints[i-1][1])
                 point_b = (self.waypoints[i][0], self.waypoints[i][1])
                 line = LineString([point_a, point_b])
+
                 if not self.fence_polygon.contains(line):
                     self.get_logger().info(f'Planned path to waypoint {i} leaves the boundary. Replanning.')
-                    bounded_path = calculate_bounded_path(point_a, point_b,self.fence_polygon)
+                    bounded_path = calculate_bounded_path(point_a, point_b,self.fence_polygon, self.sampling_rate)
                     self.get_logger().info(f'Bounded path: {bounded_path}')
+
                     for j, point in enumerate(bounded_path):
                         self.get_logger().info(f'Visiting waypoint {i-1}.{j+1}: {point}')
                         if self.go2waypoint([point[0],

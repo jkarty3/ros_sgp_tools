@@ -166,8 +166,10 @@ def lazy_astar(nodes, start_idx, goal_idx, polygon):
             if neighbor == current:
                 continue
             edge = LineString([nodes[current], nodes[neighbor]])
-            if not (polygon.contains(edge) or polygon.touches(edge)):
+            midpoint = edge.interpolate(0.5, normalized=True)
+            if not (polygon.contains(edge) or (polygon.touches(edge) and (polygon.contains(midpoint) or polygon.touches(midpoint)))):
                 continue
+
             
             tentative_g = g_score[current] + np.linalg.norm(np.array(nodes[current]) - np.array(nodes[neighbor]))
             if neighbor not in g_score or tentative_g < g_score[neighbor]:
@@ -179,16 +181,20 @@ def lazy_astar(nodes, start_idx, goal_idx, polygon):
     return None  
 
 # Calculate a list of points to travel from point a to point b while staying inside the polygon
-def calculate_bounded_path(point_a, point_b, fence_polygon, padding_length = 0.00005):
+def calculate_bounded_path(point_a, point_b, fence_polygon, sampling_rate):
     
 
     # First calculate padded points close to the intersection
-    padded_intersects = get_padded_intersects(point_a, point_b, fence_polygon, padding_length)
+    if sampling_rate>2:
+        end_points = get_padded_intersects(point_a, point_b, fence_polygon, .000001)
+    else:
+        end_points = [point_a, point_b]
+
 
     # Then run lazy A* to find the best path
     nodes = list(fence_polygon.exterior.coords[:-1])
-    nodes.append(padded_intersects[0])
-    nodes.append(padded_intersects[1])
+    nodes.append(end_points[0])
+    nodes.append(end_points[1])
     G = nx.Graph()
     for i, p in enumerate(nodes):
         G.add_node(i, pos=p)
@@ -204,4 +210,5 @@ def calculate_bounded_path(point_a, point_b, fence_polygon, padding_length = 0.0
         for point in path:
             final_path.append(nodes[point])
         return final_path
+
 

@@ -128,7 +128,9 @@ def generate_launch_description():
     path_follower = Node(package='ros_sgp_tools',
                          executable='path_follower.py',
                          namespace=namespace,
-                         parameters=[{'xy_tolerance': 1.0, 'geofence_plan': geofence_plan}],
+                         parameters=[{'xy_tolerance': 1.0,
+                                      'geofence_plan': geofence_plan,
+                                      'sampling_rate': sampling_rate}],
                          name='PathFollower')
     nodes.append(path_follower)
 
