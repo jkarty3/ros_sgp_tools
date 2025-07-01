@@ -3,6 +3,8 @@ import json
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 from shapely.geometry import Polygon, LineString, Point
+import heapq
+import networkx as nx
 
 try:
     from std_msgs.msg import Header
@@ -116,23 +118,6 @@ def ordered_intersections_by_distance(point_a, point_b, polygon):
 
     return sorted(intersection_points, key=lambda p: Point(p).distance(Point(point_a)))
 
-# Finds the indices to add an external line to a polygon to create
-def find_insertion_index(exterior_coords, intersection_point):
-    min_distance = float('inf')
-    insertion_index = -1
-
-    for i in range(len(exterior_coords) - 1):
-        segment_start = Point(exterior_coords[i])
-        segment_end = Point(exterior_coords[i + 1])
-
-        segment = LineString([segment_start, segment_end])
-        distance = segment.distance(Point(intersection_point))
-
-        if distance < min_distance:
-            min_distance = distance
-            insertion_index = i 
-
-    return insertion_index
 
 # Get 2 points inside the polygon that are near where the line (point a -> point b) intersects the polygon
 def get_padded_intersects(point_a, point_b, fence_polygon, padding_length=0.0001):
@@ -146,7 +131,11 @@ def get_padded_intersects(point_a, point_b, fence_polygon, padding_length=0.0001
         dist_to_a = line.project(intersection_point)
         if dist_to_a<padding_length or dist_to_a + padding_length > line.length:
             continue
-        if i==0:
+        if dist_to_a<padding_length:
+            padded_point = Point(point_a)
+        elif dist_to_a + padding_length > line.length:
+            padded_point = Point(point_b)
+        elif i==0:
             padded_point = line.interpolate(dist_to_a - padding_length)
         else:
             padded_point = line.interpolate(dist_to_a + padding_length)
@@ -155,58 +144,64 @@ def get_padded_intersects(point_a, point_b, fence_polygon, padding_length=0.0001
 
     return padded_points
 
-# Move one point from the outside of the polygon back to the inside
-def get_moved_point(point_a, point_b, fence_polygon, padding_length=0.0001):
-    intersection_coords = ordered_intersections_by_distance(point_a, point_b, fence_polygon)[1:-1]
-
-    # Calculate the two polygons that this intersecting line creates with the origional polygon
-    exterior_coords = list(fence_polygon.exterior.coords)
-    insertion_index_1 = find_insertion_index(exterior_coords, intersection_coords[0])
-    insertion_index_2 = find_insertion_index(exterior_coords, intersection_coords[1])
-    polygon_1 = Polygon(exterior_coords[:insertion_index_1+1] + intersection_coords[:2] + exterior_coords[insertion_index_2:])
-    polygon_2 = Polygon(exterior_coords[insertion_index_2:insertion_index_1:-1] + intersection_coords[:2] + [exterior_coords[insertion_index_2]])
-    larger_polygon = polygon_1 if polygon_1.area > polygon_2.area else polygon_2
-
-    # Find the correct direction to move the midpoint (towards the larger polygon)
-    dx, dy = intersection_coords[1][0]-intersection_coords[0][0], intersection_coords[1][1]-intersection_coords[0][1]
-    normal_vector = np.array([dy, -dx]) / np.linalg.norm(np.array([-dy, dx]))
-    midpoint = Point((intersection_coords[0][0]+intersection_coords[1][0])/2, (intersection_coords[0][1]+intersection_coords[1][1])/2)
-    moved_midpoint = Point(midpoint.x + normal_vector[0] * 0.00000001, midpoint.y + normal_vector[1] * 0.00000001)
-    if not larger_polygon.contains(moved_midpoint):
-        normal_vector = -normal_vector
-
-    # Then move it to the intersect of the smaller polygon and add padding
-    far_point = Point(midpoint.x + normal_vector[0], midpoint.y + normal_vector[1])
-    intersections = ordered_intersections_by_distance(Point(midpoint), far_point, fence_polygon)
-    intersect = Point(intersections[0][0], intersections[0][1])
-    padded = Point(intersect.x + normal_vector[0] * padding_length, intersect.y + normal_vector[1] * padding_length)
-    while not (fence_polygon.contains(padded)) and len(ordered_intersections_by_distance(intersect, padded, fence_polygon))<4:
-
-        padding_length /= 2
-        padded = Point(intersect.x + normal_vector[0] * padding_length, intersect.y + normal_vector[1] * padding_length)
-    return (padded.x, padded.y)
+def lazy_astar(nodes, start_idx, goal_idx, polygon):
+    open_set = []
+    heapq.heappush(open_set, (0, start_idx))
+    
+    came_from = {}
+    g_score = {start_idx: 0}
+    
+    while open_set:
+        _, current = heapq.heappop(open_set)
+        
+        if current == goal_idx:
+            # Reconstruct path
+            path = [current]
+            while current in came_from:
+                current = came_from[current]
+                path.append(current)
+            return path[::-1]
+        
+        for neighbor in range(len(nodes)):
+            if neighbor == current:
+                continue
+            edge = LineString([nodes[current], nodes[neighbor]])
+            if not (polygon.contains(edge) or polygon.touches(edge)):
+                continue
+            
+            tentative_g = g_score[current] + np.linalg.norm(np.array(nodes[current]) - np.array(nodes[neighbor]))
+            if neighbor not in g_score or tentative_g < g_score[neighbor]:
+                came_from[neighbor] = current
+                g_score[neighbor] = tentative_g
+                f_score = tentative_g + np.linalg.norm(np.array(nodes[neighbor]) - np.array(nodes[goal_idx]))
+                heapq.heappush(open_set, (f_score, neighbor))
+    
+    return None  
 
 # Calculate a list of points to travel from point a to point b while staying inside the polygon
-def calculate_bounded_path(point_a, point_b, fence_polygon, padding_length=0.0009):
-    path = [point_a, point_b]
+def calculate_bounded_path(point_a, point_b, fence_polygon, padding_length = 0.00005):
+    
 
-    if not fence_polygon.contains(LineString([path[0], path[1]])):
-        # First calculate padded points close to the intersection
-        padded_intersects = get_padded_intersects(path[0], path[1], fence_polygon, padding_length)
-        temp = [path[0]]
-        if len(padded_intersects):
-            for intersect in padded_intersects:
-                temp.append(intersect)
-        temp.append(path[1])
-        path = temp
+    # First calculate padded points close to the intersection
+    padded_intersects = get_padded_intersects(point_a, point_b, fence_polygon, padding_length)
 
-        # Then move points that are outside the polygon back into the polygon
-        i=0
-        while i<len(path)-1:
-            if fence_polygon.contains(LineString([path[i], path[i+1]])):
-                i+=1
-            else:
-                moved_point = get_moved_point(path[i], path[i+1], fence_polygon, padding_length)
-                path.insert(i+1, moved_point)
+    # Then run lazy A* to find the best path
+    nodes = list(fence_polygon.exterior.coords[:-1])
+    nodes.append(padded_intersects[0])
+    nodes.append(padded_intersects[1])
+    G = nx.Graph()
+    for i, p in enumerate(nodes):
+        G.add_node(i, pos=p)
 
-    return path
+    start_idx = len(nodes) - 2
+    goal_idx = len(nodes) - 1
+
+    path = lazy_astar(nodes, start_idx, goal_idx, fence_polygon)
+    if path is None:
+        return None
+    else:
+        final_path = []
+        for point in path:
+            final_path.append(nodes[point])
+        return final_path
+
