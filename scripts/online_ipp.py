@@ -33,6 +33,7 @@ from geometry_msgs.msg import Point
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile
+from std_srvs.srv import Trigger
 
 from message_filters import ApproximateTimeSynchronizer
 from utils import LatLonStandardScaler, StandardScaler
@@ -117,9 +118,19 @@ class OnlineIPP(Node):
         # Sync the waypoints with the mission planner
         self.waypoints_service = self.create_client(Waypoints, 'waypoints')
         waypoints = self.X_scaler.inverse_transform(self.waypoints)
-        self.sync_waypoints(waypoints)
         fname = f"waypoints_0-{strftime('%H-%M-%S', gmtime())}"
         self.plot_paths(fname, self.waypoints, update_waypoint=0)
+
+        # Wait for user service call to start
+        self.started = False
+        self.start_srv = self.create_service(Trigger, 'start_service', self.start_service_callback)
+        self.get_logger().info('Waiting for start signal...')
+        while rclpy.ok() and not self.started:
+            rclpy.spin_once(self, timeout_sec=1.0)
+        self.start_srv.destroy()
+        self.get_logger().info('Start signal received! Continuing execution...')
+
+        self.sync_waypoints(waypoints)
         self.get_logger().info('Initial waypoints synced with the mission planner')
 
         # Setup the subscribers
@@ -477,6 +488,12 @@ class OnlineIPP(Node):
                                  f'{fname}.png'),
                                  bbox_inches='tight')
         plt.close()
+
+    def start_service_callback(self, request, response):
+        self.started = True
+        response.success = True
+        response.message = 'Node started'
+        return response
 
 
 if __name__ == '__main__':
