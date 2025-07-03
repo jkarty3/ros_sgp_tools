@@ -98,6 +98,7 @@ class OnlineIPP(Node):
                                                     dtype=np.float64,
                                                     chunks=True)
 
+
         # setup variables
         self.waypoints = None
         self.data_X = []
@@ -203,12 +204,16 @@ class OnlineIPP(Node):
 
         self.sampling_rate = request.data.sampling_rate
 
-        # Save fence_vertices and sampling rate to data store
+        # Save fence_vertices, sampling rate, and waypoints to data store
         dset = self.data_file.create_dataset("fence_vertices", 
                                              fence_vertices_array.shape, 
-                                             dtype=np.float32,
+                                             dtype=np.float64,
                                              data=fence_vertices_array)
         dset.attrs['sampling_rate'] = self.sampling_rate
+        self.data_file.create_dataset("offline_waypoints",
+                                      self.waypoints.shape,
+                                      dtype = np.float64,
+                                      data = self.waypoints)
 
         # Normalize the train set and waypoints
         self.X_scaler = LatLonStandardScaler()
@@ -358,7 +363,7 @@ class OnlineIPP(Node):
             if update_waypoint != -1:
                 dset = self.data_file.create_dataset(fname,
                                                      self.waypoints.shape, 
-                                                     dtype=np.float32,
+                                                     dtype=np.float64,
                                                      data=lat_lon_waypoints)
                 dset.attrs['update_waypoint'] = update_waypoint
 
