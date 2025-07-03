@@ -65,6 +65,10 @@ class offlineIPP(Node):
         self.num_robots = self.get_parameter('num_robots').get_parameter_value().integer_value
         self.get_logger().info(f'Num Robots: {self.num_robots}')
 
+        self.declare_parameter('distance_budget', 100.0)
+        self.distance_budget = self.get_parameter('distance_budget').get_parameter_value().double_value
+        self.get_logger().info(f'Distance Budget: {self.distance_budget}')
+
         self.declare_parameter('use_altitude', False)
         self.use_altitude = self.get_parameter('use_altitude').get_parameter_value().bool_value
         self.get_logger().info(f'Use Altitude: {self.use_altitude}')
@@ -143,14 +147,17 @@ class offlineIPP(Node):
                              num_vehicles=self.num_robots,
                              resample=self.num_waypoints,
                              start_nodes=self.home_position,
-                             time_limit=20)
+                             time_limit=20,
+                             max_dist=100) # Initial max distance budget for TSP)
         Xu_fixed = np.copy(Xu_init[:, :1, :])
         Xu_init = np.array(Xu_init).reshape(-1, 2)
 
         # Get the initial IPP solution
         transform = IPPTransform(n_dim=2, 
                                  sampling_rate=self.sampling_rate,
-                                 num_robots=self.num_robots)
+                                 num_robots=self.num_robots,
+                                 distance_budget = self.distance_budget,
+                                 constraint_weight=100000.)
         # Don't update the first waypoint (home position)
         transform.update_Xu_fixed(Xu_fixed)
 

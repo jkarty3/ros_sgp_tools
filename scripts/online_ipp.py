@@ -72,6 +72,10 @@ class OnlineIPP(Node):
         self.adaptive_ipp = self.get_parameter('adaptive_ipp').get_parameter_value().bool_value
         self.get_logger().info(f'Adaptive IPP: {self.adaptive_ipp}')
 
+        self.declare_parameter('distance_budget', 100.0)
+        self.distance_budget = self.get_parameter('distance_budget').get_parameter_value().double_value
+        self.get_logger().info(f'Distance Budget: {self.distance_budget}')
+
         self.declare_parameter('data_folder', '')
         self.data_folder = self.get_parameter('data_folder').get_parameter_value().string_value
         self.get_logger().info(f'Data Folder: {self.data_folder}')
@@ -235,7 +239,9 @@ class OnlineIPP(Node):
         if IPP_model:
             self.transform = IPPTransform(n_dim=self.n_dim,
                                           sampling_rate=self.sampling_rate,
-                                          num_robots=1)
+                                          num_robots=1,
+                                          distance_budget = self.distance_budget,
+                                          constraint_weight=100000.)
             self.IPP_model, _ = continuous_sgp(self.num_waypoints, 
                                                self.X_candidates,
                                                likelihood_variance,

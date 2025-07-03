@@ -38,6 +38,7 @@ def generate_launch_description():
     fcu_url = get_var('FCU_URL', 'udp://0.0.0.0:14550@')
     ping1d_port = get_var('PING1D_PORT', '/dev/ttyUSB0')
     kernel = get_var('KERNEL', 'RBF')
+    distance_budget = float(get_var('DISTANCE_BUDGET', 100))
 
     num_robots = 1
     geofence_plan = PathJoinSubstitution([FindPackageShare('ros_sgp_tools'),
@@ -49,6 +50,7 @@ def generate_launch_description():
     print(f"DATA_TYPE: {data_type}")
     print(f"NUM_WAYPOINTS: {num_waypoints}")
     print(f"SAMPLING_RATE: {sampling_rate}")
+    print(f"DIZTANCE_BUDGET: {distance_budget}")
     print(f"DATA_BUFFER_SIZE: {data_buffer_size}")
     print(f"TRAIN_PARAM_INDUCING: {train_param_inducing}")
     print(f"NUM_PARAM_INDUCING': {num_param_inducing}")
@@ -70,6 +72,7 @@ def generate_launch_description():
 	    'data_type': data_type,
 	    'num_waypoints': num_waypoints,
 	    'sampling_rate': sampling_rate,
+        'distance_budget': distance_budget,
 	    'data_buffer_size': data_buffer_size,
 	    'train_param_inducing': train_param_inducing,
 	    'num_param_inducing': num_param_inducing,
@@ -102,7 +105,8 @@ def generate_launch_description():
                                  'num_robots': num_robots,
                                  'sampling_rate': sampling_rate,
                                  'geofence_plan': geofence_plan,
-                                 'kernel': offline_kernel
+                                 'kernel': offline_kernel,
+                                 'distance_budget': distance_budget
                                 }
                            ])
     nodes.append(offline_planner)
@@ -115,6 +119,7 @@ def generate_launch_description():
                           parameters=[
                               {'data_type': data_type,
                                'adaptive_ipp': adaptive_ipp,
+                               'distance_budget': distance_budget,
                                'data_folder': data_folder,
                                'data_buffer_size': data_buffer_size,
                                'train_param_inducing': train_param_inducing,
